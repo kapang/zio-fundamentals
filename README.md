@@ -1,37 +1,41 @@
-# Functional Effects
+# ZIO Fundamentals
 
-For years, actors have allowed Scala application developers to build async, concurrent, and distributed applications that are resilient, reactive, and scalable. Increasingly, however, functional effect systems like can are being used to create these types of applications, with greater type-safety, more flexibility, and increased testability.
+Writing asynchronous and concurrent applications using traditional tools, like everything under `java.util.concurrent`
+is generally a very complicated task: you really need to think about what you are doing to avoid typical concurrency issues,
+like deadlocks and race conditions.  And let’s be honest, thinking about all the possible scenarios that could arise is not
+just hard, but also sometimes infeasible. As an alternative, libraries such as Akka (which implements the Actor Model)
+have made it possible for Scala developers to build applications that are Resilient, Responsive and Scalable without the
+problems mentioned before. However, Functional Effect libraries like ZIO are being used more and more to create this type
+of applications, with greater type-safety, ergonomics, flexibility and testability.
 
-In this course, Scala developers will learn how to solve complex problems in asynchronous, concurrent programming using the ZIO library. Upon completion of the course, attendees will be confident using the ZIO library (and similar libraries, like Monix or Cats IO) to build modern high-performance, asynchronous, concurrent applications that don't block threads, don't deadlock, and don't leak resources; and which follow best practices regarding error management, thread management, and dependency management.
+Upon completion of this course, attendees will be able to build modern ZIO-based applications that are highly-performant,
+resilient, efficient, easy to understand and to test; which don’t block threads nor produce deadlocks nor leak resources,
+following at the same time best practices on managing errors and dependencies.
 
 ### Who Should Attend
 
-Scala developers who would like to write modern async, concurrent, and distributed applications that are robust, testable, and powerful.
+Scala developers who would like to write modern applications that are robust, testable, and highly-performant, using the ZIO library.
 
 ### Prerequisites
 
-Good working knowledge of Scala, including familiarity with immutable data, pattern matching, and basic recursion. Developers who have attended Functional Scala Foundations will be well-prepared for this course.
+Good working knowledge of Scala, including familiarity with immutable data, pattern matching, and basic recursion.
 
 ### Topics
 
-- Laziness of functional effects
-- Escaping callback hell
-- Using the compiler to help deal with errors
-- Separating recoverable errors from non-recoverable errors
-- Separating blocking code from async code
-- Safe handling of async and concurrent resources
-- Efficient concurrency and parallelism
-- Shared concurrent state without visibility issues, deadlocks, or race conditions
-- Testing functional effects
-- Retrying and repetition
-- Resource-safe, effectful, async streaming
-- Test-friendly dependency management
+- The basics of ZIO Functional Effects
+- Error Management: Use the full power of the Scala Compiler to help you to deal with errors!
+- Best practices in Error Management: Separating Recoverable Errors from Non-Recoverable Errors
+- Control flow handling
+- Safe Resource Management: Making Resource Leaks impossible!
+- Efficient Concurrency and Parallelism with ZIO Fibers
+- Sharing state in concurrent scenarios without deadlocks or race conditions
+- Modularity and Dependency Management
 
 # Usage
 
 ## From the UI
 
-1. Download the repository as a [zip archive](https://github.com/jdegoes/functional-effects/archive/master.zip).
+1. Download the repository as a [zip archive](https://github.com/ScalaConsultants/zio-fundamentals/archive/master.zip).
 2. Unzip the archive, usually by double-clicking on the file.
 3. Configure the source code files in the IDE or text editor of your choice.
 
@@ -42,17 +46,17 @@ Good working knowledge of Scala, including familiarity with immutable data, patt
 2. Clone the repository.
 
     ```bash
-    git clone https://github.com/jdegoes/functional-effects
+    git clone https://github.com/ScalaConsultants/zio-fundamentals
     ```
 5. Launch project provided `sbt`.
 
     ```bash
-    cd functional-effects; ./sbt
+    cd zio-fundamentals; ./sbt
     ```
 6. Enter continuous compilation mode.
 
     ```bash
-    sbt:functional-effects> ~ test:compile
+    sbt:zio-fundamentals> ~ test:compile
     ```
 
 Hint: You might get the following error when starting sbt:
