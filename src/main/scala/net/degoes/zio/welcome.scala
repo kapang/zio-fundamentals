@@ -4,15 +4,14 @@ object welcome {
   //
   // Please join and say hello:
   //
-  // CHAT ROOM:  https://discord.gg/dAbfksd
+  // DISCORD SERVER:  https://discord.gg/zCtvm7Qr (#zio-fundamentals channel)
   //
   // Please git clone and build:
   //
-  // REPOSITORY: https://github.com/jdegoes/functional-effects
+  // REPOSITORY: https://github.com/ScalaConsultants/zio-fundamentals
   //
-  // Daily Schedule (ET):
+  // Daily Schedule (GMT+3):
   //
-  //    START :  7:00 AM
-  //    LUNCH : 10:00 AM
-  //    END   :  2:00 PM
+  //    START :  3:00 PM
+  //    END   :  6:00 PM
 }
