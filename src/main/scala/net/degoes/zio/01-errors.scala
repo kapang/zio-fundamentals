@@ -219,6 +219,8 @@ object ZIOFinally extends ZIOAppDefault {
   val run = tickingBomb2
 }
 
+// The full ZIO mental model:
+// ZEnvironment[R] => Either[Cause[E], A]
 object SequentialCause extends ZIOAppDefault {
 
   val failed1 = Cause.fail("Uh oh 1")
