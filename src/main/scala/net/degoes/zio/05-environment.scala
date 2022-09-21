@@ -185,10 +185,28 @@ object LayerEnvironment extends ZIOAppDefault {
     /**
      * EXERCISE
      *
-     * Using `ZIO#provide`, provide the full layer into the effect to remove its dependencies.
+     * Using `ZIO#provideEnvironment`, provide the full layer into the effect to remove its dependencies.
      */
-    val effect: ZIO[Any, IOException, Unit] = ???
+    val effect1: ZIO[Files with Logging, IOException, Unit] = ???
 
-    effect
+    effect1
+
+    /**
+     * EXERCISE
+     *
+     * Using `ZIO#provideLayer`, provide the full layer into the effect to remove its dependencies.
+     */
+    val effect2: ZIO[Files with Logging, IOException, Unit] = ???
+
+    effect2
+
+    /**
+     * EXERCISE
+     *
+     * Using `ZIO#provide`, provide into the effect all the individual required layers to remove its dependencies.
+     */
+    val effect3: ZIO[Files with Logging, IOException, Unit] = ???
+
+    effect3
   }
 }
