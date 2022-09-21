@@ -7,7 +7,7 @@ import zio._
  * objects of different types. ZIO calls these objects "services", because
  * they contain bundles of functionality consumed your application.
  */
-object TypeIndeedMap extends ZIOAppDefault {
+object TypeIndexedMap extends ZIOAppDefault {
   trait Logging
   object Logging extends Logging
 
