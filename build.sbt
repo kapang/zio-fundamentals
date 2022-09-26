@@ -3,7 +3,7 @@ val ZIOVersion = "2.0.2"
 lazy val root = project
   .in(file("."))
   .settings(
-    name := "functional-effects",
+    name := "zio-fundamentals",
     organization := "net.degoes",
     scalaVersion := "2.13.8",
     initialCommands in Compile in console :=

@@ -4,7 +4,7 @@ object welcome {
   //
   // Please join and say hello:
   //
-  // DISCORD SERVER:  https://discord.gg/zCtvm7Qr (#zio-fundamentals channel)
+  // DISCORD SERVER:  https://discord.gg/SBbGS6gaK5 (#zio-fundamentals channel)
   //
   // Please git clone and build:
   //
