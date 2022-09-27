@@ -140,10 +140,23 @@ object LayerEnvironment extends ZIOAppDefault {
     /**
      * EXERCISE
      *
-     * Using `ZLayer.succeed`, create a layer that implements the `Files`
-     * service.
+     * Create a mock implementation of the `Files` service.
      */
-    val live: ZLayer[Any, Nothing, Files] = ???
+    type FilesMock
+    object FilesMock {
+      /**
+       * EXERCISE
+       *
+       * Using `ZLayer.succeed`, create a layer that provides a `FilesMock`
+       */
+      val layer: ULayer[Files] = ???
+    }
+
+
+  }
+
+  trait Printer {
+    def print(line: String): UIO[Unit]
   }
 
   trait Logging {
@@ -154,10 +167,19 @@ object LayerEnvironment extends ZIOAppDefault {
     /**
      * EXERCISE
      *
-     * Using `ZLayer.fromFunction`, create a layer that requires `Console`
-     * and uses the console to provide a logging service.
+     * Create a live implementation of the `Logging` service that requires `Printer`
+     * and uses the printer to print logs.
      */
-    val live: ZLayer[Console, Nothing, Logging] = ???
+    type LoggingLive
+    object LoggingLive {
+
+      /**
+       * EXERCISE
+       *
+       * Using `ZLayer.fromFunction`, create a layer that provides a `LoggingLive`
+       */
+      val layer: URLayer[Printer, Logging] = ???
+    }
   }
 
   /**
@@ -180,12 +202,12 @@ object LayerEnvironment extends ZIOAppDefault {
      *
      * Create a layer using `ZLayer.make` and specifying all the pieces that go into the layer.
      */
-    val fullLayer: ZLayer[Any, Nothing, Files with Logging] = ??? // ZLayer.make[Files with Logging](???)
+    val fullLayer: ULayer[Files with Logging] = ??? // ZLayer.make[Files with Logging](???)
 
     /**
      * EXERCISE
      *
-     * Using `ZIO#provideEnvironment`, provide the full layer into the effect to remove its dependencies.
+     * Using `ZIO#provideEnvironment`, provide `fullLayer` into `effect1` to remove its dependencies.
      */
     val effect1: ZIO[Files with Logging, IOException, Unit] = ???
 
@@ -194,7 +216,7 @@ object LayerEnvironment extends ZIOAppDefault {
     /**
      * EXERCISE
      *
-     * Using `ZIO#provideLayer`, provide the full layer into the effect to remove its dependencies.
+     * Using `ZIO#provideLayer`, provide `fullLayer` into `effect2` to remove its dependencies.
      */
     val effect2: ZIO[Files with Logging, IOException, Unit] = ???
 
