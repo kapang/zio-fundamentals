@@ -230,5 +230,7 @@ object LayerEnvironment extends ZIOAppDefault {
     val effect3: ZIO[Files with Logging, IOException, Unit] = ???
 
     effect3
+
+    ???
   }
 }

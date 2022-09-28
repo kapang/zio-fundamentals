@@ -377,3 +377,21 @@ object AsyncExample extends ZIOAppDefault {
       _    <- Console.printLine(body)
     } yield ()
 }
+
+object FutureExample extends ZIOAppDefault {
+  import scala.concurrent.Future
+
+  trait User
+
+  def getUser(userId: Long): Future[User] = ???
+
+  /**
+   * EXERCISE
+   *
+   * Using `ZIO.fromFuture`, convert the above Future-based API into a
+   * ZIO-based one.
+   */
+  def getUserZIO(userId: Long): Task[User] = ???
+
+  val run = ???
+}
