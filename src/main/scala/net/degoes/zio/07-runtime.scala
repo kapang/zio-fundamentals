@@ -117,7 +117,7 @@ object ThreadPool extends ZIOAppDefault {
       Console.printLine("Main"))
 }
 
-object CustomLogger {
+object CustomLogger extends ZIOAppDefault {
 
   /**
    * EXERCISE
