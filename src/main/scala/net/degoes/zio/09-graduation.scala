@@ -77,30 +77,38 @@ object SimpleActor extends ZIOAppDefault {
   }
 }
 
-object parallel_web_crawler {
-
-  import zio.Clock._
+object ParallelWebCrawler extends ZIOAppDefault {
 
   trait Web {
     def getURL(url: URL): IO[Exception, String]
   }
   object Web {
+    /**
+     * EXERCISE
+     *
+     * Using `ZIO.serviceWithZIO`, delegate to the `Web` module's `getURL` function.
+     */
+    def getURL(url: URL): ZIO[Web, Exception, String] = ???
+  }
+
+  final case class WebLive() extends Web {
 
     /**
      * EXERCISE
      *
-     * Implement a layer for `Web` that uses the `ZIO.attemptBlockingIO` combinator
+     * Implement this method using the `ZIO.attemptBlockingIO` combinator
      * to safely wrap `Source.fromURL` into a functional effect.
      */
-    val live: ZLayer[Any, Nothing, Web] = ???
+    override def getURL(url: URL): IO[Exception, String] = ???
   }
-
-  /**
-   * EXERCISE
-   *
-   * Using `ZIO.accessM`, delegate to the `Web` module's `getURL` function.
-   */
-  def getURL(url: URL): ZIO[Web, Exception, String] = ???
+  object WebLive {
+    /**
+     * EXERCISE
+     *
+     * Implement a layer for `WebLive`
+     */
+    val layer: ZLayer[Any, Nothing, Web] = ???
+  }
 
   final case class CrawlState[+E](visited: Set[URL], errors: List[E]) {
     final def visitAll(urls: Set[URL]): CrawlState[E] = copy(visited = visited ++ urls)
@@ -114,7 +122,7 @@ object parallel_web_crawler {
    * Implement the `crawl` function using the helpers provided in this object.
    *
    * {{{
-   * def getURL(url: URL): ZIO[Blocking, Exception, String]
+   * def getURL(url: URL): ZIO[Web, Exception, String]
    * def extractURLs(root: URL, html: String): List[URL]
    * }}}
    */
@@ -122,10 +130,10 @@ object parallel_web_crawler {
     seeds: Set[URL],
     router: URL => Set[URL],
     processor: (URL, String) => IO[E, Unit]
-  ): ZIO[Web with Clock, Nothing, List[E]] = {
+  ): ZIO[Web, Nothing, List[E]] = {
     val emptySet = ZIO.succeed(Set.empty[URL])
 
-    def loop(seeds: Set[URL], ref: Ref[CrawlState[E]]): ZIO[Web with Clock, Nothing, Unit] =
+    def loop(seeds: Set[URL], ref: Ref[CrawlState[E]]): ZIO[Web, Nothing, Unit] =
       if (seeds.isEmpty) ZIO.unit
       else ???
 
@@ -204,18 +212,34 @@ object parallel_web_crawler {
         About         -> """<html><body><a href="home.html">Home</a><a href="http://google.com">Google</a></body></html>"""
       )
 
-    /**
-     * EXERCISE
-     *
-     * Implement a test layer using the SiteIndex data.
-     */
-    val testLayer: ZLayer[Any, Nothing, Web] = ???
+    final case class WebTest() extends Web {
+
+      /**
+       * EXERCISE
+       *
+       * Implement a test version of this method using the SiteIndex data.
+       */
+      override def getURL(url: URL): IO[Exception, String] = ???
+    }
+
+    object WebTest {
+      /**
+       * EXERCISE
+       *
+       * Implement a layer for `WebTest`
+       */
+      val layer: ZLayer[Any, Nothing, Web] = ???
+    }
 
     val TestRouter: URL => Set[URL] =
       url => if (url.parsed.apexDomain == Some("zio.dev")) Set(url) else Set()
 
-    val Processor: (URL, String) => IO[Unit, List[(URL, String)]] =
-      (url, html) => ZIO.succeed(List(url -> html))
+    val Processor: (URL, String) => IO[(URL, String), Unit] = { (url, html) =>
+      Random.nextBoolean.flatMap {
+        case true => Console.printLine(s"Processing URL: $url, HTML: $html").orDie
+        case false => ZIO.fail((url, html))
+      }
+    }
   }
 
   /**
