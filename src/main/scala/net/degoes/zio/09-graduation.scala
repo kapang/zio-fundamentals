@@ -1,8 +1,6 @@
 package net.degoes.zio
 
 import zio._
-import java.text.NumberFormat
-import java.nio.charset.StandardCharsets
 
 object Sharding extends ZIOAppDefault {
 
@@ -43,8 +41,6 @@ object Sharding extends ZIOAppDefault {
 
 object SimpleActor extends ZIOAppDefault {
 
-  import zio.stm._
-
   sealed trait Command
   case object ReadTemperature                       extends Command
   final case class AdjustTemperature(value: Double) extends Command
@@ -68,11 +64,9 @@ object SimpleActor extends ZIOAppDefault {
 
     (for {
       actor <- makeActor(0)
-      _ <- ZIO.foreachParDiscard(temperatures) { temp =>
-            actor(AdjustTemperature(temp))
-          }
-      temp <- actor(ReadTemperature)
-      _    <- Console.printLine(s"Final temperature is ${temp}")
+      _     <- ZIO.foreachParDiscard(temperatures)(temp => actor(AdjustTemperature(temp)))
+      temp  <- actor(ReadTemperature)
+      _     <- Console.printLine(s"Final temperature is ${temp}")
     } yield ())
   }
 }
@@ -83,6 +77,7 @@ object ParallelWebCrawler extends ZIOAppDefault {
     def getURL(url: URL): IO[Exception, String]
   }
   object Web {
+
     /**
      * EXERCISE
      *
@@ -102,6 +97,7 @@ object ParallelWebCrawler extends ZIOAppDefault {
     override def getURL(url: URL): IO[Exception, String] = ???
   }
   object WebLive {
+
     /**
      * EXERCISE
      *
@@ -223,6 +219,7 @@ object ParallelWebCrawler extends ZIOAppDefault {
     }
 
     object WebTest {
+
       /**
        * EXERCISE
        *
@@ -236,7 +233,7 @@ object ParallelWebCrawler extends ZIOAppDefault {
 
     val Processor: (URL, String) => IO[(URL, String), Unit] = { (url, html) =>
       Random.nextBoolean.flatMap {
-        case true => Console.printLine(s"Processing URL: $url, HTML: $html").orDie
+        case true  => Console.printLine(s"Processing URL: $url, HTML: $html").orDie
         case false => ZIO.fail((url, html))
       }
     }
@@ -253,9 +250,6 @@ object ParallelWebCrawler extends ZIOAppDefault {
 }
 
 object Hangman extends ZIOAppDefault {
-  import Dictionary.Dictionary
-
-  import zio.Random._
   import java.io.IOException
 
   /**
