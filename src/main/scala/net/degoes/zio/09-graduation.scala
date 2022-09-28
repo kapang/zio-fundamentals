@@ -18,26 +18,26 @@ object Sharding extends ZIOAppDefault {
   def shard[R, E, A](
     queue: Queue[A],
     n: Int,
-    worker: A => ZIO[R, E, Unit]
+    worker: (String, A) => ZIO[R, E, Unit]
   ): ZIO[R, Nothing, E] = ???
 
   val run = {
-    def makeWorker(ref: Ref[Int]): Int => ZIO[Any, String, Unit] =
-      (work: Int) =>
+    def makeWorker(ref: Ref[Int]): (String, Int) => ZIO[Any, String, Unit] =
+      (id: String, item: Int) =>
         for {
           count <- ref.get
-          _ <- if (count < 100) Console.printLine(s"Worker is processing item ${work} after ${count}").orDie
-              else ZIO.fail(s"Uh oh, failed processing ${work} after ${count}")
+          _ <- if (count < 100) Console.printLine(s"Worker ${id} is processing item ${item} after ${count}").orDie
+              else ZIO.fail(s"Uh oh, worker ${id} failed processing ${item} after ${count}")
           _ <- ref.update(_ + 1)
         } yield ()
 
-    (for {
+    for {
       queue <- Queue.bounded[Int](100)
       ref   <- Ref.make(0)
       _     <- queue.offer(1).forever.fork
       error <- shard(queue, 10, makeWorker(ref))
       _     <- Console.printLine(s"Failed with ${error}")
-    } yield ())
+    } yield ()
   }
 }
 
