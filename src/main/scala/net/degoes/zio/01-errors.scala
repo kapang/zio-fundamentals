@@ -214,7 +214,7 @@ object ZIOFinally extends ZIOAppDefault {
    * "Executed" is not printed out.
    */
   val tickingBomb =
-    ZIO.sleep(1.second) *> ZIO.fail("Boom!")
+    ZIO.fail("Boom!").delay(1.second)
 
   val run = tickingBomb2
 }
@@ -270,7 +270,7 @@ object Sandbox extends ZIOAppDefault {
   val failed1    = ZIO.fail("Uh oh 1")
   val failed2    = ZIO.fail("Uh oh 2")
   val finalizer1 = ZIO.fail(new Exception("Finalizing 1!")).orDie
-  val finalizer2 = ZIO.fail(new Exception("Finalizing 2!")).orDie
+  val finalizer2 = ZIO.die(new Exception("Finalizing 2!"))
 
   val composed = ZIO.uninterruptible {
     (failed1 ensuring finalizer1) zipPar (failed2 ensuring finalizer2)

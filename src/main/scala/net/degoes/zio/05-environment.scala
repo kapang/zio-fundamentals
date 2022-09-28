@@ -63,10 +63,18 @@ object AccessEnvironment extends ZIOAppDefault {
   /**
    * EXERCISE
    *
-   * Using `ZIO.service`, access a `Config` service from the environment, and
+   * Using `ZIO.serviceWith`, access a `Config` service from the environment, and
    * extract the `port` field from it.
    */
   val accessPort: ZIO[Config, Nothing, Int] = ???
+
+  /**
+   * EXERCISE
+   *
+   * Using `ZIO.serviceWithZIO`, access a `Config` service from the environment, and
+   * print the `port` field from it.
+   */
+  val printPort: ZIO[Config, Nothing, Unit] = ???
 
   val run = {
     val config = Config("localhost", 7878)
