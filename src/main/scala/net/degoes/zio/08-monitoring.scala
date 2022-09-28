@@ -32,7 +32,7 @@ object LogSpan extends ZIOAppDefault {
   /**
    * EXERCISE
    *
-   * Add a log span of "createUser" to the whole function.
+   * Using `ZIO.logSpan` add a log span of "createUser" to the whole function.
    */
   def createUser(userName: String, passHash: String, salt: Long): ZIO[Any, Nothing, Unit] =
     for {
@@ -75,7 +75,7 @@ object CounterExample extends ZIOAppDefault {
   lazy val printCounter: ZIO[Any, Nothing, Unit] = ???
 
   lazy val run = {
-    val processor = processRequest(Request("input")).repeatN(99)
+    val processor = processRequest(Request("input")).delay(100.millis).repeatN(99)
     val printer   = printCounter.schedule(Schedule.fixed(100.millis))
 
     processor.race(printer)
