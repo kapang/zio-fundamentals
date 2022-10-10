@@ -10,8 +10,4 @@ object welcome {
   //
   // REPOSITORY: https://github.com/ScalaConsultants/zio-fundamentals
   //
-  // Daily Schedule (GMT+3):
-  //
-  //    START :  3:00 PM
-  //    END   :  6:00 PM
 }
