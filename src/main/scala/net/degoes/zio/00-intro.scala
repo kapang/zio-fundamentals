@@ -307,8 +307,12 @@ object PromptName extends ZIOAppDefault {
    * success value of the left hand effect.
    */
   val run =
-    Console.printLine("What is your name?") *>
+    //Console.printLine("What is your name?") *>
+    //  Console.readLine.flatMap(name => Console.printLine(s"Your name is: ${name}"))
+    
+    Console.printLine("What is your name?").flatMap(_ =>
       Console.readLine.flatMap(name => Console.printLine(s"Your name is: ${name}"))
+    )
 
   /**
    * EXERCISE
@@ -321,7 +325,7 @@ object PromptName extends ZIOAppDefault {
     left: ZIO[R, E, A],
     right: ZIO[R, E, B]
   ): ZIO[R, E, B] =
-    ???
+    left.flatMap(_ => right) // _ means u discard the resutl of the first one here
 }
 
 object ForComprehension extends ZIOAppDefault {
@@ -332,12 +336,18 @@ object ForComprehension extends ZIOAppDefault {
    * Rewrite the following program to use a `for` comprehension.
    */
   val run =
-    Console
-      .printLine("What is your name?")
-      .flatMap(
-        _ => Console.readLine.flatMap(name => Console.printLine(s"Your name is: ${name}"))
-      )
-
+    // Console
+    //   .printLine("What is your name?")
+    //   .flatMap(
+    //     _ => Console.readLine.flatMap(name => Console.printLine(s"Your name is: ${name}"))
+    //   )
+    for {
+      _ <- Console.printLine("What is your name?")
+      name <- Console.readLine
+      _ <- Console.printLine(s"Your name is: ${name}") // only last line is map, all other ones are flatmap
+      // if you use name = Console.readLine,  this just assign it to a local var inside of the flatmap here, not a map
+    } yield ()
+    // this is good esp for beginning zio, it's more natural and reads nicer
 }
 
 object ForComprehensionBackward extends ZIOAppDefault {
@@ -353,12 +363,26 @@ object ForComprehensionBackward extends ZIOAppDefault {
    * which will translate to a `map`.
    */
   val run = {
-    for {
-      _   <- Console.printLine("How old are you?")
-      age <- readInt
-      _ <- if (age < 18) Console.printLine("You are a kid!")
-          else Console.printLine("You are all grown up!")
-    } yield ()
+    // for {
+    //   _   <- Console.printLine("How old are you?")
+    //   age <- readInt
+    //   _ <- if (age < 18) Console.printLine("You are a kid!")
+    //       else Console.printLine("You are all grown up!")
+    // } yield ()
+    Console.printLine("How old are you?").flatMap {
+      _ => readInt
+      .flatMap { age =>
+        (if (age < 18) Console.printLine("You are a kid!") else Console.printLine("You are all grown up!")).
+          map(_ => ()) // map to a unit since yield (), this is not actually necessary to write here but it's how it's transalted
+      }
+    }
+    // can also transform the last one to map instead if we're not showing the direct translate
+    // Console.printLine("How old are you?").flatMap {
+    //   _ => readInt
+    //   .map { age =>
+    //     if (age < 18) Console.printLine("You are a kid!") else Console.printLine("You are all grown up!"))
+    //   }
+    // }
   }
 }
 
@@ -374,8 +398,20 @@ object NumberGuesser extends ZIOAppDefault {
    * the number (using `Console.readLine`), feeding their response to `analyzeAnswer`,
    * above.
    */
+   //side note, the imiplicit trace is used during compile time for system lvl tracing
   val run =
-    ???
+    // for {
+    //   _ <- Console.printLine("Introduce your guess")
+    //   random <- Random.nextInt // is RNG a side effect in zio? it's description only so no;
+    //   guess <- Console.readLine 
+    //   _ <- analyzeAnswer(random, guess)
+    // } yield ()  
+    // more elegantly: can consolidate into 2 lines  
+    for {
+      random <- Random.nextInt
+      guess <- Console.printLine("Introduce your guess") *> guess <- Console.readLine 
+      _ <- analyzeAnswer(random, guess)
+    } yield ()
 }
 
 object SingleSyncInterop extends ZIOAppDefault {
@@ -385,7 +421,7 @@ object SingleSyncInterop extends ZIOAppDefault {
    *
    * Using ZIO.attempt, convert `println` into a ZIO function.
    */
-  def myPrintLn(line: String): Task[Unit] = ???
+  def myPrintLn(line: String): Task[Unit] = ZIO.attempt(println(line)) // encapsulates any scala code into zio effect (zio.apply in zio1)
 
   val run =
     myPrintLn("Hello World!")
@@ -398,7 +434,7 @@ object MultipleSyncInterop extends ZIOAppDefault {
    * into a functional effect, which describes the action of printing a line
    * of text to the console, but which does not actually perform the print.
    */
-  def printLine(line: String): Task[Unit] = ???
+  def printLine(line: String): Task[Unit] = ZIO.attempt(println(line))
 
   /**
    * Using `ZIO.attempt`, wrap Scala's `scala.io.StdIn.readLine()` method to
@@ -406,7 +442,7 @@ object MultipleSyncInterop extends ZIOAppDefault {
    * printing a line of text to the console, but which does not actually
    * perform the print.
    */
-  val readLine: Task[String] = ???
+  val readLine: Task[String] = ZIO.attempt(scala.ioStdIn.readLine())
 
   val run = {
     for {
@@ -415,6 +451,15 @@ object MultipleSyncInterop extends ZIOAppDefault {
       _    <- printLine(s"Good to meet you, ${name}!")
     } yield ()
   }
+  // no diff for user, but the above is better
+  // all side effects will still be handled by this
+  // zio effects are interruptable, you can't interrupt each one in this case before the next executes which is important
+  // which mean no context switching which means could be less performant. by thread interrupt we mean virtual thread interrupt - fiber
+  // ZIO.attempt {
+  //   println("Hello, what is your name?"
+  //   val name = scala.ioStdIn.readLine()
+  //   println(s"Good to meet you, ${name}!")
+  // }
 }
 
 object AsyncExample extends ZIOAppDefault {
