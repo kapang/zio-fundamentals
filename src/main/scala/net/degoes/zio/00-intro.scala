@@ -1,6 +1,7 @@
 package net.degoes.zio
 
-import zio._
+import zio._ // this is zio 2 so it's nice
+// import zio.console._ //used to be for printline
 
 /*
  * INTRODUCTION
@@ -49,13 +50,41 @@ object ZIOModel {
    * Implement all missing methods on the ZIO companion object.
    */
   object ZIO {
-    def succeed[A](success: => A): ZIO[Any, Nothing, A] = ???
+    def succeed[A](success: => A): ZIO[Any, Nothing, A] = 
+      ZIO(_ => Right(success))
+      // regardless of what env, it's disgarded which is why it's Any
+      //ZIO(env => Right(success))
+      
+    def fail[E](error: => E): ZIO[Any, E, Nothing] = 
+      ZIO(_ => Left(error))
 
-    def fail[E](error: => E): ZIO[Any, E, Nothing] = ???
+    // ZIO.effect in zio1, but ti's ZIO.attemp in zio2
+    def attempt[A](code: => A): ZIO[Any, Throwable, A] = 
+      ZIO(_ => 
+        try { 
+          Right(code) 
+        } catch { 
+          case e: Throwable => Left(e) // this works in this toy project
+          //case e: NonFatal => Left(e) 
+          // it only catches non fatal in zio, not all throwables, e.g. you never want to catch a outof memory ex
+          // zio will just let it happen
+          // Victor says - this is cool for lib, but for services here, throwable may make more sense?
+          // Jorge says - we might still want to catch all trouble cuz we don't want to lose any errors, we want to make sure
+          // we're logging all errors; in zio 2, u don't need to handle all errors all the time, they can be forgotten because
+          // zio 2 automatically logs them - TMR
+        }
+      )
+    // alternate station suggested by Vlad
+    /*  
+      ZIO(_ => 
+        scala.util.Try(code).toEither
+      )
+    */
 
-    def attempt[A](code: => A): ZIO[Any, Throwable, A] = ???
-
-    def environment[R]: ZIO[R, Nothing, ZEnvironment[R]] = ???
+    def environment[R]: ZIO[R, Nothing, ZEnvironment[R]] = 
+      ZIO(env => Right(env))
+      // or simplified
+      //ZIO(Right(_))
   }
 
   /**
@@ -64,22 +93,31 @@ object ZIOModel {
    * Implement all missing methods on the ZIO class.
    */
   final case class ZIO[-R, +E, +A](run: ZEnvironment[R] => Either[E, A]) { self =>
-    def map[B](f: A => B): ZIO[R, E, B] = ???
+    def map[B](f: A => B): ZIO[R, E, B] = ZIO(env => self.run(env) map f)
 
     def flatMap[R1 <: R, E1 >: E, B](f: A => ZIO[R1, E1, B]): ZIO[R1, E1, B] =
-      ???
+      ZIO(
+        env => self.run(env).map(f)
+        .map(_.run(env))
+        .flatten
+      )
+
 
     def zip[R1 <: R, E1 >: E, B](that: ZIO[R1, E1, B]): ZIO[R1, E1, (A, B)] =
-      ???
+      self.flatMap(a => that.map(a -> _)) // to conver to zio
 
-    def either: ZIO[R, Nothing, Either[E, A]] = ???
+    def either: ZIO[R, Nothing, Either[E, A]] = 
+      ZIO(r => Right(self.run(r))) // wrap w/ Right to return zio success
 
-    def provide(r: ZEnvironment[R]): ZIO[Any, E, A] = ???
+    def provide(r: ZEnvironment[R]): ZIO[Any, E, A] = 
+      ZIO(_ => self.run(r)) // we can ignore the env and just use R
 
     def orDie(implicit ev: E <:< Throwable): ZIO[R, Nothing, A] =
       ZIO(r => self.run(r).fold(throw _, Right(_)))
+      // intentionaly forgetting that we can fail, creating a description of throwing an ex, will be explained tmr
   }
 
+  // thid doesn't actually call println just describing it
   def printLine(line: String): ZIO[Any, Nothing, Unit] =
     ZIO.attempt(println(line)).orDie
 
@@ -88,6 +126,9 @@ object ZIOModel {
 
   def run[A](zio: ZIO[Any, Throwable, A])(implicit unsafe: Unsafe): A =
     zio.run(ZEnvironment.empty).fold(throw _, a => a)
+    // this is calling the same run() func as above in ZIO class
+    // not too much to worry about the unsafe, will be explained later
+
 
   /**
    * Run the following main function and compare the results with your
@@ -111,14 +152,17 @@ object ZIOTypes {
    *
    * Provide definitions for the ZIO type aliases below.
    */
-  type Task[+A]     = ???
-  type UIO[+A]      = ???
-  type RIO[-R, +A]  = ???
-  type IO[+E, +A]   = ???
-  type URIO[-R, +A] = ???
+  type Task[+A]     = ZIO[Any, Throwable, A] // equivalent to Future, alwasy fails w/ throwable
+  type UIO[+A]      = ZIO[Any, Nothing, A] // UIO - unexceptional , cannot fail
+  type RIO[-R, +A]  = ZIO[R, Nothing, A] // RIO - requires an R env
+  type IO[+E, +A]   = ZIO[Any, E, A] // IO no env 
+  type URIO[-R, +A] = ZIO[R, Nothing, A] // no env, cuz theres no E in between the type and also the U prefix
 }
 
 object SuccessEffect extends ZIOAppDefault {
+  // in zio 1
+  // no need to return exit code
+  // def run(args: List[String]): ZIO[Console with Random with System, Nothing, ExitCode] = ???
 
   /**
    * EXERCISE
@@ -127,7 +171,7 @@ object SuccessEffect extends ZIOAppDefault {
    * "Hello World".
    */
   val run =
-    ???
+    ZIO.succeed("Hello World") // very easy, it has a ZIO[Any, Nothing, Nothing] type return here
 }
 
 object HelloWorld extends ZIOAppDefault {
@@ -139,8 +183,11 @@ object HelloWorld extends ZIOAppDefault {
    * to create an effect that, when executed, will print out "Hello World!" to
    * the console.
    */
-  val run =
-    ???
+  // in zio 1: ZIO[Console, IOException, Unit]
+  val run = //: IO[IOException, Unit]  =
+    Console.printLine("Hello World!")
+    // we're not returning anything, IO is more specific than TASK
+    // in zio 1, it's putStrLn(), it came from haskell
 }
 
 object SimpleMap extends ZIOAppDefault {
@@ -153,7 +200,7 @@ object SimpleMap extends ZIOAppDefault {
    * integer (the length of the string)`.
    */
   val run =
-    ???
+    Console.readLine.map(_.length) //getStrLn
 }
 
 object PrintSequenceZip extends ZIOAppDefault {
@@ -164,8 +211,12 @@ object PrintSequenceZip extends ZIOAppDefault {
    * Using `zip`, compose a sequence of `Console.printLine` effects to produce an effect
    * that prints three lines of text to the console.
    */
-  val run =
-    ???
+  val run = // ZIO[Any, IOException, Unit] is the ret type, 
+    // new thing in zio 2
+    Console.printLine("Line 1") zip // <*> is equivalent to zip
+      Console.printLine("Line 2") zip
+      Console.printLine("Line 3")
+    
 }
 
 object PrintSequence extends ZIOAppDefault {
@@ -176,8 +227,11 @@ object PrintSequence extends ZIOAppDefault {
    * Using `*>` (`zipRight`), compose a sequence of `Console.printLine` effects to
    * produce an effect that prints three lines of text to the console.
    */
+   // what if 2nd effect fails? then everything fials; it's failfast not fail safe no partial result
   val run =
-    ???
+    Console.printLine("Line 1") *> // this collects only the right result; also zipLeft <* is available
+      Console.printLine("Line 2") *>
+      Console.printLine("Line 3")
 }
 
 object PrintReadSequence extends ZIOAppDefault {
@@ -190,7 +244,11 @@ object PrintReadSequence extends ZIOAppDefault {
    * effect, which models reading a line of text from the console.
    */
   val run =
-    ???
+    // in this case can be zip or zipright
+    // if you have them as separate, then the 1st value will be discarded, e.g.
+    //Console.printLine("Hit Enter to exit...")
+    //Console.readLine 
+    Console.printLine("Hit Enter to exit...") *> Console.readLine 
 }
 
 object SimpleDuplication extends ZIOAppDefault {
@@ -203,11 +261,17 @@ object SimpleDuplication extends ZIOAppDefault {
    * value that stores the expression, and then referencing that variable
    * three times.
    */
+  val printHelloAgain = Console.printLine("Hello again")
+   
   val run = {
+    // Console.printLine("Hello") *>
+    //   Console.printLine("Hello again") *>
+    //   Console.printLine("Hello again") *>
+    //   Console.printLine("Hello again")
     Console.printLine("Hello") *>
-      Console.printLine("Hello again") *>
-      Console.printLine("Hello again") *>
-      Console.printLine("Hello again")
+      printHelloAgain *>
+      printHelloAgain *>
+      printHelloAgain
   }
 }
 
