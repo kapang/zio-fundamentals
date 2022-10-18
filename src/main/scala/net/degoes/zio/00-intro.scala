@@ -409,7 +409,7 @@ object NumberGuesser extends ZIOAppDefault {
     // more elegantly: can consolidate into 2 lines  
     for {
       random <- Random.nextInt
-      guess <- Console.printLine("Introduce your guess") *> guess <- Console.readLine 
+      guess <- Console.printLine("Introduce your guess") *> Console.readLine 
       _ <- analyzeAnswer(random, guess)
     } yield ()
 }
@@ -442,7 +442,7 @@ object MultipleSyncInterop extends ZIOAppDefault {
    * printing a line of text to the console, but which does not actually
    * perform the print.
    */
-  val readLine: Task[String] = ZIO.attempt(scala.ioStdIn.readLine())
+  val readLine: Task[String] = ZIO.attempt(scala.io.StdIn.readLine())
 
   val run = {
     for {
@@ -465,6 +465,7 @@ object MultipleSyncInterop extends ZIOAppDefault {
 object AsyncExample extends ZIOAppDefault {
   import scala.concurrent.ExecutionContext.global
 
+  // too many callback base
   def loadBodyAsync(onSuccess: String => Unit, onFailure: Throwable => Unit): Unit =
     global.execute { () =>
       if (scala.util.Random.nextDouble() < 0.01) onFailure(new java.io.IOException("Could not load body!"))
@@ -478,7 +479,12 @@ object AsyncExample extends ZIOAppDefault {
    * nice clean ZIO effect.
    */
   lazy val loadBodyAsyncZIO: ZIO[Any, Throwable, String] =
-    ???
+    ZIO.async(
+      callback => loadBodyAsync(
+        body => callback(ZIO.succeed(body)), 
+        e => callback(ZIO.fail(e))
+       )
+    )
 
   val run =
     for {
