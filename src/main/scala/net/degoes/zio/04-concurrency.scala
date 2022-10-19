@@ -15,7 +15,12 @@ object ForkJoin extends ZIOAppDefault {
    * and finally, print out a message "Joined".
    */
   val run =
-    printer
+    for {
+      fiber <- printer.fork // now we have 2 fibers
+      _ <- Console.printLine("Forked")
+      _ <- fiber.join // blocks until both fibers are completed
+      _ <- Console.printLine("Joined")
+    } yield ()
 }
 
 object ForkInterrupt extends ZIOAppDefault {
@@ -32,9 +37,16 @@ object ForkInterrupt extends ZIOAppDefault {
    * finally, print out a message "Interrupted".
    */
   val run =
-    (infinitePrinter *> ZIO.sleep(10.millis))
+    //(infinitePrinter *> ZIO.sleep(10.millis))
+    for {
+      fiber <- infinitePrinter.fork
+      _ <- Console.printLine("Forked")
+      _ <- ZIO.sleep(10.millis) *> fiber.interrupt // dont call join, cuz otherwise will never complete since ur printing forever and next line will never call
+      _ <- Console.printLine("Interrupted")
+    } yield ()
 }
 
+// TODO: watch vid
 object ParallelFib extends ZIOAppDefault {
 
   /**
@@ -80,7 +92,7 @@ object TimeoutExample extends ZIOAppDefault {
    *
    * Print out a message if it timed out.
    */
-  lazy val run = fib(20)
+  lazy val run = fib(20).timeout(10.millis) // timeout under the hood uses a separate fiber
 }
 
 object RaceExample extends ZIOAppDefault {
@@ -97,7 +109,9 @@ object RaceExample extends ZIOAppDefault {
    * winning success value.
    *
    */
-  lazy val run = ???
+  lazy val run = loadFromCache race loadFromDB 
+  // db will complete first since delay is shorter; it will interrupt the other one and not leave it running
+  // if one fails, the other one will continue on still to race
 }
 
 object AlarmAppImproved extends ZIOAppDefault {
@@ -130,8 +144,23 @@ object AlarmAppImproved extends ZIOAppDefault {
    * prints a dot every second that the alarm is sleeping for, and then
    * prints out a wakeup alarm message, like "Time to wakeup!!!".
    */
+  val printer = Console.printLine(".").delay(1.second).forever
   val run =
-    ???
+    for {
+      sleepDur <- getAlarmDuration
+      //_ <- ZIO.sleep(sleepDur) zipPar printer // zipPar lets u do it in parallel but it won't stop it since printer is inf and it requires
+      // both to finish; it gets both success params
+      _ <- ZIO.sleep(sleepDur) race printer 
+      _ <- Console.printLine("Time to wakeup!!!")
+    } yield ()
+
+    // alternative solution
+    // for {
+    //   sleepDur <- getAlarmDuration
+    //   fiber <- printer.fork
+    //   _ <- ZIO.sleep(sleepDur) *> fiber.interrupt // interrupt it after sleep is done
+    //   _ <- Console.printLine("Time to wakeup!!!")
+    // } yield ()
 }
 
 object ParallelZip extends ZIOAppDefault {
@@ -150,7 +179,7 @@ object ParallelZip extends ZIOAppDefault {
    * the result.
    */
   val run =
-    ???
+    fib(10) zipPar fib(13)
 }
 
 /**
