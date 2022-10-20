@@ -197,7 +197,7 @@ object RefExample extends ZIOAppDefault {
    * and total number of points.
    */
   final case class PiState(
-    inside: Ref[Long],
+    inside: Ref[Long], // normally use var here w/o Ref
     total: Ref[Long]
   )
 
@@ -227,7 +227,16 @@ object RefExample extends ZIOAppDefault {
    * If the point is inside the circle then increment `PiState#inside`. In any
    * case, increment `PiState#total`.
    */
-  def addPoint(point: (Double, Double), piState: PiState): UIO[Unit] = ???
+  def addPoint(point: (Double, Double), piState: PiState): UIO[Unit] = 
+    // alternative solution to use when
+    //piState.inside.update(_ + 1).when(insideCircle(point._1, point._2)) *> piState.inside.update(_ + 1)
+    
+    for {
+      _ <- if (insideCircle(point._1, point._2)) piState.inside.update(_ + 1) else ZIO.unit // it internally stores a long, so increment that counter
+      _ <- piState.total.update(_ + 1)
+      //_ <- piState.total.get.flatMap(v => piState.total.set(v + 1)) // this is not the same as above since they are not done atomically
+      // 2 fibers, so we'll have inconsistent states, hence why you should use update since it's atomic
+    } yield ()
 
   /**
    * EXERCISE
@@ -235,8 +244,42 @@ object RefExample extends ZIOAppDefault {
    * Build a multi-fiber program that estimates the value of `pi`. Print out
    * ongoing estimates continuously until the estimation is complete.
    */
+   def printer(piState: PiState) = //: IO[IOException, Nothing] = 
+    (for {
+      inside <- piState.inside.get
+      total <- piState.total.get
+      //pi = estimatePi(inside, total) // this is not a zio effect
+      pi <- ZIO.succeed(estimatePi(inside, total))
+      _ <- Console.printLine(s"Current val of PI: $pi")
+    } yield ()).forever
+
+  def worker(piState: PiState) =
+    (for {
+      point <- randomPoint
+      _  <- addPoint(point, piState)
+    } yield ()).forever
+
   val run =
-    ???
+   
+    for {
+      // inside <- Ref.make(0L)
+      // total <- Ref.make(0L)
+      //piState = PiState(inside, total)
+      // more elgantly as
+      piState <- Ref.make(0L).zipWith(Ref.make(0L))(PiState(_, _))
+      fiber <- printer(piState).fork
+
+      // Option 1: using your own fibers
+      //_ <- ZIO.foreach(1 to 10) (_ => worker(piState).fork) // each worker needs to be separate fiber
+      // can also try List.fill(10)(1) instead of range 1 to 10
+
+      // Option 2: this will create # fibers for ur machine which may not actually be 10
+      //_ <- ZIO.foreachPar(1 to 10) (_ => worker(piState)) 
+
+      // ZIO2: how to tweak it, specify it below can also be parallelUnbound for infinite fibers used
+       _ <- ZIO.foreachPar(1 to 10) (_ => worker(piState)) @@ ZIOAspect.parallel(10)
+      _ <- fiber.join
+    } yield ()
 }
 
 object PromiseExample extends ZIOAppDefault {
@@ -247,7 +290,10 @@ object PromiseExample extends ZIOAppDefault {
    * Do some computation that produces an integer. When yare done, complete
    * the promise with `Promise#succeed`.
    */
-  def doCompute(result: Promise[Nothing, Int]): UIO[Unit] = ???
+  def doCompute(result: Promise[Nothing, Int]): UIO[Unit] = 
+    // ZIO.succeed(50).flatMap(result.succeed(_)).unit // add .unit cuz we don't care about the boolean returned to match the return type
+    ZIO.succeed(50).intoPromise(result).unit
+    //intoPromise was switched out from flatMap
 
   /**
    * EXERCISE
@@ -256,7 +302,12 @@ object PromiseExample extends ZIOAppDefault {
    * that it can use, and then wait for the promise to be completed,
    * using `Promise#await`.
    */
-  lazy val waitForCompute: ZIO[Any, Nothing, Unit] = ???
+  lazy val waitForCompute: ZIO[Any, Nothing, Unit] = 
+    for {
+      promise <- Promise.make[Nothing, Int]
+      _ <- doCompute(promise).fork
+      _ <- promise.await // this lets you wait for the promise to finish
+    } yield ()
 
   val run =
     waitForCompute
@@ -273,13 +324,14 @@ object FiberRefExample extends ZIOAppDefault {
   def makeChild(ref: FiberRef[Int]) =
     for {
       _ <- ref.get.debug("child initial value")
+      _ <- ref.update(_ + 1)
       _ <- ref.get.debug("child after update")
     } yield ()
 
   val run =
     for {
       ref   <- FiberRef.make[Int](0, identity(_), _ + _)
-      _     <- ref.get.debug("parent before fork")
+      _     <- ref.get.debug("parent before fork") // good for debugging in the fiber
       child <- makeChild(ref).fork
       _     <- ref.get.debug("parent after fork")
       _     <- child.join
