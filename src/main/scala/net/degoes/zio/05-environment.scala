@@ -17,7 +17,8 @@ object TypeIndexedMap extends ZIOAppDefault {
   trait Cache
   object Cache extends Cache
 
-  val envLogging = ZEnvironment(Logging: Logging)
+  //val envLogging = ZEnvironment(Logging: Logging) // instead of Logging.type it let it infer or add a return type for envLogging
+  val envLogging: ZEnvironment[Logging] = ZEnvironment(Logging) // instead of Logging.type it let it infer or add a return type for envLogging
 
   val envDatabase = ZEnvironment(Database: Database)
 
@@ -30,7 +31,8 @@ object TypeIndexedMap extends ZIOAppDefault {
    * (`envLogging`, `envDatabase`, and `envCache`) into a single map that
    * has all three objects.
    */
-  val allThree: ZEnvironment[Database with Cache with Logging] = ???
+  val allThree: ZEnvironment[Database with Cache with Logging] = 
+    envLogging ++ envDatabase ++ envCache
 
   /**
    * EXERCISE
@@ -41,9 +43,9 @@ object TypeIndexedMap extends ZIOAppDefault {
    * as it cannot be inferred (the map needs to know which of the objects
    * you want to retrieve, and that can be specified only by type).
    */
-  lazy val logging  = ???
-  lazy val database = ???
-  lazy val cache    = ???
+  lazy val logging  = allThree.get[Logging]
+  lazy val database = allThree.get[Database]
+  lazy val cache    = allThree.get[Cache]
 
   val run = ???
 }
@@ -52,13 +54,27 @@ object AccessEnvironment extends ZIOAppDefault {
 
   final case class Config(host: String, port: Int)
 
+
+  // in zio 1, zio 2 just need to use ZEnvironment under the hood
+  // val z2: ZIO[Has[HttpClient] with Has[DbClient] with Has[ConfigService], Nothing, String] = ??? 
+
+  // // in zio 2
+  // val z: ZIO[HttpClient with DbClient with ConfigService, Nothing, String] = ???
+
   /**
    * EXERCISE
    *
    * Using `ZIO.service`, access a `Config` service from the environment, and
    * extract the `host` field from it.
    */
-  val accessHost: ZIO[Config, Nothing, String] = ???
+   // ZEnvironment[R] => Either[E, A]
+  val accessHost: ZIO[Config, Nothing, String] = 
+    // for {
+    //   config <- ZIO.service[Config]
+    // } yield config.host
+    // don't need for comprehnsion
+    ZIO.service[Config].map(_.host)
+
 
   /**
    * EXERCISE
@@ -66,7 +82,8 @@ object AccessEnvironment extends ZIOAppDefault {
    * Using `ZIO.serviceWith`, access a `Config` service from the environment, and
    * extract the `port` field from it.
    */
-  val accessPort: ZIO[Config, Nothing, Int] = ???
+   // this is the short hand of the above
+  val accessPort: ZIO[Config, Nothing, Int] = ZIO.serviceWith[Config](_.port)
 
   /**
    * EXERCISE
@@ -74,7 +91,9 @@ object AccessEnvironment extends ZIOAppDefault {
    * Using `ZIO.serviceWithZIO`, access a `Config` service from the environment, and
    * print the `port` field from it.
    */
-  val printPort: ZIO[Config, Nothing, Unit] = ???
+  val printPort: ZIO[Config, Nothing, Unit] = 
+    ZIO.serviceWithZIO[Config](config => Console.printLine(config.port).orDie)
+    // serviceWithZIO lets you execute it as  a zio  effect
 
   val run = {
     val config = Config("localhost", 7878)
@@ -113,7 +132,10 @@ object ProvideEnvironment extends ZIOAppDefault {
   val run = {
     val config = Config("localhost", 7878)
 
-    ???
+    (getServer zip useDatabaseConnection)
+    // requires both zenv, since getServer reqs config and database conn requires db connection
+      .provideEnvironment(ZEnvironment(Config("test-server", 8080)) ++ ZEnvironment(DatabaseConnection())
+    )
   }
 }
 
@@ -142,6 +164,10 @@ object LayerEnvironment extends ZIOAppDefault {
 
   trait Files {
     def read(file: String): IO[IOException, String]
+    // def read(file: String): ZIO[Config, IOException, String] 
+    // in general not a good idea to pass a zenv (e.g. Config) here
+    // it makes it more complicated and you're also leaking impl detail since this is a interface
+    // esp if there are multiple of this then it becomes complicated
   }
   object Files {
 
@@ -150,14 +176,20 @@ object LayerEnvironment extends ZIOAppDefault {
      *
      * Create a mock implementation of the `Files` service.
      */
-    type FilesMock
+    // type FilesMock
+    final case class FilesMock() extends Files {
+      override def read(file: String): IO[IOException, String] = ZIO.succeed("contents")
+    }
+
     object FilesMock {
       /**
        * EXERCISE
        *
        * Using `ZLayer.succeed`, create a layer that provides a `FilesMock`
        */
-      val layer: ULayer[Files] = ???
+      val layer: ZLayer[Any, Nothing, Files] = //ULayer[Files] = 
+        ZLayer.succeed(FilesMock())
+      // use the trait not the type FilesMock - similar to OOP priniciple
     }
 
 
@@ -165,6 +197,29 @@ object LayerEnvironment extends ZIOAppDefault {
 
   trait Printer {
     def print(line: String): UIO[Unit]
+  } //TODO check vid, not sure why this wasn't gone over
+  object Printer {
+
+    /**
+      * EXERCISE
+      *
+      * Create a live implementation of the `Logging` service that requires `Printer`
+      * and uses the printer to print logs.
+      */
+    // type LoggingLive
+    final case class PrinterLive() extends Printer {
+      override def print(line: String): UIO[Unit] = Console.printLine(line).orDie
+    }
+    object PrinterLive {
+
+      /**
+        * EXERCISE
+        *
+        * Using `ZLayer.fromFunction`, create a layer that provides a `LoggingLive`
+        */
+      val layer: ZLayer[Any, Nothing, Printer] = //URLayer[Printer, Logging]
+        ZLayer.succeed(PrinterLive())
+    }
   }
 
   trait Logging {
@@ -178,7 +233,10 @@ object LayerEnvironment extends ZIOAppDefault {
      * Create a live implementation of the `Logging` service that requires `Printer`
      * and uses the printer to print logs.
      */
-    type LoggingLive
+    // type LoggingLive
+    final case class LoggingLive(printer: Printer) extends Logging {
+      override def log(line: String): UIO[Unit] = printer.print(s"LOG: $line")
+    }
     object LoggingLive {
 
       /**
@@ -186,7 +244,13 @@ object LayerEnvironment extends ZIOAppDefault {
        *
        * Using `ZLayer.fromFunction`, create a layer that provides a `LoggingLive`
        */
-      val layer: URLayer[Printer, Logging] = ???
+      val layer: ZLayer[Printer, Nothing, Logging] = //URLayer[Printer, Logging] 
+        //ZLayer.succeed(LoggingLive()) we can't do this because we don't nhave a printer,
+        
+        // use fromFunction instead
+        //ZLayer.fromFunction(printer => LoggingLive(printer))
+        // in zio 1, we used (LoggingLive(_)).toLayer
+        ZLayer.fromFunction(LoggingLive(_))
     }
   }
 
@@ -195,7 +259,7 @@ object LayerEnvironment extends ZIOAppDefault {
    *
    * Discover the inferred type of `effect`, and write it out explicitly.
    */
-  val effect =
+  val effect: ZIO[Files with Logging, IOException, Unit] =
     for {
       files   <- ZIO.service[Files]
       logging <- ZIO.service[Logging]
@@ -210,7 +274,8 @@ object LayerEnvironment extends ZIOAppDefault {
      *
      * Create a layer using `ZLayer.make` and specifying all the pieces that go into the layer.
      */
-    val fullLayer: ULayer[Files with Logging] = ??? // ZLayer.make[Files with Logging](???)
+    val fullLayer: ULayer[Files with Logging] = // ZLayer.make[Files with Logging](???)
+      ZLayer.make[Files with Logging](Files.FilesMock.layer, Logging.LoggingLive.layer, Printer.PrinterLive.layer)
 
     /**
      * EXERCISE
@@ -219,7 +284,10 @@ object LayerEnvironment extends ZIOAppDefault {
      */
     val effect1: ZIO[Files with Logging, IOException, Unit] = ???
 
-    effect1
+    // zlayer describes how to build an env, for demo only on how it works, effect2 is the real way to do it
+    for {
+      zenv <- fullLayer.build
+    } yield effect1.provideEnvironment(zenv)
 
     /**
      * EXERCISE
@@ -228,7 +296,7 @@ object LayerEnvironment extends ZIOAppDefault {
      */
     val effect2: ZIO[Files with Logging, IOException, Unit] = ???
 
-    effect2
+    effect2.provideLayer(fullLayer)
 
     /**
      * EXERCISE
@@ -237,8 +305,11 @@ object LayerEnvironment extends ZIOAppDefault {
      */
     val effect3: ZIO[Files with Logging, IOException, Unit] = ???
 
-    effect3
+    //effect3.provide(Files.FilesMock.layer, Logging.LoggingLive.layer, Printer.PrinterLive.layer)
 
-    ???
+    
+    // if you add ZLayer.Debug.tree you can get a dependency tree
+    // or you can do ZLayer.Debug.mermaid and it will generate a mermaid depedency graph in the brwoser for you
+    effect3.provide(Files.FilesMock.layer, Logging.LoggingLive.layer, Printer.PrinterLive.layer, ZLayer.Debug.tree)
   }
 }

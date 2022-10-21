@@ -323,15 +323,16 @@ object FiberRefExample extends ZIOAppDefault {
    */
   def makeChild(ref: FiberRef[Int]) =
     for {
-      _ <- ref.get.debug("child initial value")
+      _ <- ref.get.debug("child initial value") // good for debugging in the fiber
       _ <- ref.update(_ + 1)
       _ <- ref.get.debug("child after update")
     } yield ()
 
   val run =
     for {
-      ref   <- FiberRef.make[Int](0, identity(_), _ + _)
-      _     <- ref.get.debug("parent before fork") // good for debugging in the fiber
+      //ref   <- FiberRef.make[Int](0, identity(_), _ + _)
+      ref   <- FiberRef.make[Int](0, _ => 10, _ + _) // doing this u can see the thte child start w/ 10 parent starts w/ 0
+      _     <- ref.get.debug("parent before fork") 
       child <- makeChild(ref).fork
       _     <- ref.get.debug("parent after fork")
       _     <- child.join
