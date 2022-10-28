@@ -17,7 +17,19 @@ object Sharding extends ZIOAppDefault {
     queue: Queue[A],
     n: Int,
     worker: (String, A) => ZIO[R, E, Unit]
-  ): ZIO[R, Nothing, E] = ???
+  ): ZIO[R, Nothing, E] = {
+    // val z: ZIO[R, E, Seq[Unit]] = 
+    ZIO.
+      foreachPar(1 to n) { i =>
+        (for {
+          a <- queue.take
+          _ <- worker(s"worker-$i", a)//.uniterruptable
+        
+        } yield ()).forever
+      }
+      .flip
+      .mapError(_.head)
+  }
 
   val run = {
     def makeWorker(ref: Ref[Int]): (String, Int) => ZIO[Any, String, Unit] =
@@ -53,10 +65,43 @@ object SimpleActor extends ZIOAppDefault {
    * Using ZIO Queue and Promise, implement the logic necessary to create an
    * actor as a function from `Command` to `Task[Double]`.
    */
+   //  side note: zio actors are pretty much abandoned now as it's not really needed when working w/ zio
   def makeActor(initialTemperature: Double): UIO[TemperatureActor] = {
     type Bundle = (Command, Promise[Nothing, Double])
 
-    ???
+
+    def processCommand(inbox: Queue[Bundle], state: Ref[Double]): UIO[Unit] = { // returns a temperature
+      for {
+        bundle <- inbox.take // takes an item from the inbox
+        (command, promise) = bundle
+        _ <- (command match {
+                          case ReadTemperature => state.get.debug("get") // add debug statements
+                          case AdjustTemperature(value) => state.updateAndGet(_ + value).debug("update") // lets you modify and get the new value
+                        }).intoPromise(promise) // store the result to complete the promise
+        
+      } yield ()
+    }
+    
+    //TemperatureActor is just a function here
+    // actor is like a mailbox or queue of msgs
+    for {
+      inbox <- Queue.bounded[Bundle](100)
+      state <- Ref.make(initialTemperature) // equivalent to mutable var
+      fiber <- processCommand(inbox, state).forever.fork // to do the work, create a fiber to process it
+    } yield { command =>
+      //inbox.offer(command) *> state.get // add the command to the queue in the actor; we can't get the current state immediately after queing it, we have to process it first
+      
+      // need to sync between fibers, using promises
+      for {
+        promise <- Promise.make[Nothing, Double]
+        
+        //_ <- inbox.offer(command, promise)  
+        //temperature <- promise.await // wait for the command to finish before returning
+
+        //simplified above 2 lines as this
+        temperature <- inbox.offer(command, promise) *> promise.await 
+      } yield temperature
+    }
   }
 
   val run = {
@@ -83,7 +128,8 @@ object ParallelWebCrawler extends ZIOAppDefault {
      *
      * Using `ZIO.serviceWithZIO`, delegate to the `Web` module's `getURL` function.
      */
-    def getURL(url: URL): ZIO[Web, Exception, String] = ???
+    def getURL(url: URL): ZIO[Web, Exception, String] = 
+      ZIO.serviceWithZIO(_.getURL(url))
   }
 
   final case class WebLive() extends Web {
@@ -94,7 +140,17 @@ object ParallelWebCrawler extends ZIOAppDefault {
      * Implement this method using the `ZIO.attemptBlockingIO` combinator
      * to safely wrap `Source.fromURL` into a functional effect.
      */
-    override def getURL(url: URL): IO[Exception, String] = ???
+    override def getURL(url: URL): IO[Exception, String] = 
+      // acquireRelease creates a zio effect w/o an env, but our return val says no env required so acquireReleaseWith
+      ZIO.acquireReleaseWith(
+        ZIO.attemptBlockingIO(
+          scala.io.Source.fromURL(url.toString())
+        )
+      ) (source => ZIO.attemptBlockingIO(source.close()).orDie
+      ) (source => 
+        ZIO.attemptBlockingIO(source.mkString("\n"))
+      )
+
   }
   object WebLive {
 
@@ -103,7 +159,7 @@ object ParallelWebCrawler extends ZIOAppDefault {
      *
      * Implement a layer for `WebLive`
      */
-    val layer: ZLayer[Any, Nothing, Web] = ???
+    val layer: ZLayer[Any, Nothing, Web] /* aka ULayer[Web] */ = ZLayer.succeed(WebLive()) 
   }
 
   final case class CrawlState[+E](visited: Set[URL], errors: List[E]) {
@@ -131,7 +187,26 @@ object ParallelWebCrawler extends ZIOAppDefault {
 
     def loop(seeds: Set[URL], ref: Ref[CrawlState[E]]): ZIO[Web, Nothing, Unit] =
       if (seeds.isEmpty) ZIO.unit
-      else ???
+      else {
+        val newSeeds = ZIO.foreachPar(seeds.flatMap(router)) { seed =>
+          for {
+            contents <- Web.getURL(seed) // this can return w/ exception
+            _ <- processor(seed, contents).catchAll(e => ref.update(_.logError(e))) // this can fail w/ type E, so catchall to handle it
+          } yield extractURLs(seed, contents)
+        }.map(_.flatten) // [Web, Exception, Set[URL]]
+        .orElse(emptySet) //&& ZIO.aspect
+
+        // newSeeds.flatMap { seeds => 
+        //   ref.update(_.visitAll(seeds))
+        // }
+
+        for {
+          seeds <- newSeeds
+          //_ <-  ref.update(_.visitAll(seeds))
+          dedupedSeeds <- ref.modify(state => (seeds -- state.visited, state.visitAll(seeds)))
+          _ <- loop(dedupedSeeds, ref)
+        } yield ()
+      }
 
     for {
       ref   <- Ref.make[CrawlState[E]](CrawlState(seeds, Nil))
@@ -215,7 +290,11 @@ object ParallelWebCrawler extends ZIOAppDefault {
        *
        * Implement a test version of this method using the SiteIndex data.
        */
-      override def getURL(url: URL): IO[Exception, String] = ???
+      override def getURL(url: URL): IO[Exception, String] = 
+        ZIO.fromOption(SiteIndex.get(url))
+          // add this for IO Exception
+          //.orElse(ZIO.fail(new Exception("URL not found"))) 
+          .orElseFail(new Exception("URL not found")) //orElseFail removes the need for ZIO.fail
     }
 
     object WebTest {
@@ -225,7 +304,7 @@ object ParallelWebCrawler extends ZIOAppDefault {
        *
        * Implement a layer for `WebTest`
        */
-      val layer: ZLayer[Any, Nothing, Web] = ???
+      val layer: ULayer[Web] /*ZLayer[Any, Nothing, Web]*/ = ZLayer.succeed(WebTest())
     }
 
     val TestRouter: URL => Set[URL] =
@@ -246,7 +325,8 @@ object ParallelWebCrawler extends ZIOAppDefault {
    * it needs.
    */
   val run =
-    Console.printLine("Hello World!")
+    //Console.printLine("Hello World!")
+    crawl(Set(test.Home), test.TestRouter, test.Processor).provide(test.WebTest.layer)
 }
 
 object Hangman extends ZIOAppDefault {
@@ -258,7 +338,14 @@ object Hangman extends ZIOAppDefault {
    * Implement an effect that gets a single, lower-case character from
    * the user.
    */
-  lazy val getChoice: ZIO[Any, IOException, Char] = ???
+  lazy val getChoice: ZIO[Any, IOException, Char] = 
+    (Console.printLine("Please introduce a character: ") *> Console.readLine).flatMap { input =>
+      // check if letter is char
+      input.toList match {
+        case c :: Nil => ZIO.succeed(c)
+        case _ => Console.printLine("Invalid input") *> getChoice // get choice again if it fails
+      }
+    }
 
   /**
    * EXERCISE
@@ -266,7 +353,8 @@ object Hangman extends ZIOAppDefault {
    * Implement an effect that prompts the user for their name, and
    * returns it.
    */
-  lazy val getName: ZIO[Any, IOException, String] = ???
+  lazy val getName: ZIO[Any, IOException, String] = 
+    Console.printLine("Give me your name: ") *> Console.readLine
 
   /**
    * EXERCISE
@@ -274,15 +362,38 @@ object Hangman extends ZIOAppDefault {
    * Implement an effect that chooses a random word from the dictionary.
    * The dictionary is `Dictionary.Dictionary`.
    */
-  lazy val chooseWord: ZIO[Any, Nothing, String] = ???
+  lazy val chooseWord: ZIO[Any, Nothing, String] = 
+    // for {
+    //   index <- Random.nextIntBounded(Dictionary.Dictionary.length)
+    //   word <- ZIO.attempt(Dictionary.Dictionary(index)).orDie // it should never fail but what if someone removed the whole dictionary and it's empty
+    // } yield word
 
+    // alternative
+    for {
+      shuffled <- Random.shuffle(Dictionary.Dictionary)
+      word <- ZIO.fromOption(shuffled.headOption).orDieWith(_ => new Exception ("Empty dictionary"))
+    } yield word
+ 
   /**
    * EXERCISE
    *
    * Implement the main game loop, which gets choices from the user until
    * the game is won or lost.
    */
-  def gameLoop(oldState: State): ZIO[Any, IOException, Unit] = ???
+  def gameLoop(oldState: State): ZIO[Any, IOException, Unit] = 
+    for {
+      choice <- getChoice
+      newState = oldState.addChar(choice)
+      guessResult = analyzeNewInput(oldState, newState, choice)
+      _ <- guessResult match {
+        case GuessResult.Won => Console.printLine("You won!")
+        case GuessResult.Lost => Console.printLine("You lost!")
+        case GuessResult.Correct => Console.printLine("You gusssed a letter!") *> gameLoop(newState)
+        case GuessResult.Incorrect => Console.printLine("You failed to guess a letter!") *> gameLoop(newState)
+        case GuessResult.Unchanged => Console.printLine("You already guessed this letter!") *> gameLoop(newState)
+      }
+    } yield ()
+
 
   def renderState(state: State): ZIO[Any, IOException, Unit] = {
 

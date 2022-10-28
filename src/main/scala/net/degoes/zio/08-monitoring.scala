@@ -13,7 +13,10 @@ object SimpleLogging extends ZIOAppDefault {
   val program =
     for {
       ref   <- Ref.make(0)
-      _     <- ZIO.foreachParDiscard(0 to 10)(i => ref.update(_ + i))
+      _     <- ZIO.foreachParDiscard(0 to 10)(i => ZIO.log("Updating ref") *> ref.update(_ + i)) 
+      // can also use ZIO.logInfo or ZIO.logError w/ specific lvl, default is info if not specified
+      //alternatively can use this at the end instead do zio.log
+      //@@ ZIOAspect.logged("")
       value <- ref.get
     } yield value
 
@@ -22,7 +25,7 @@ object SimpleLogging extends ZIOAppDefault {
    *
    * Surround `program` in `LogLevel.Error` to change its log level.
    */
-  val program2: ZIO[Any, Nothing, Int] = program
+  val program2: ZIO[Any, Nothing, Int] = LogLevel.Error(program)
 
   val run = program *> program2
 }
@@ -34,13 +37,20 @@ object LogSpan extends ZIOAppDefault {
    *
    * Using `ZIO.logSpan` add a log span of "createUser" to the whole function.
    */
+   // log span let yous add the label for the logs and lets you have 1 format easily instead of manually adding it:
+  // ZIO.log(s"[http-client] Creating user ${userName}")
+  // ZIO.log(s"[db-client] Creating user ${userName}")
   def createUser(userName: String, passHash: String, salt: Long): ZIO[Any, Nothing, Unit] =
     for {
       _ <- ZIO.log(s"Creating user ${userName}")
     } yield ()
 
+  
+
   val run =
-    createUser("sherlockholmes", "jkdf67sf6", 21381L)
+    //createUser("sherlockholmes", "jkdf67sf6", 21381L) *>
+    createUser("sherlockholmes", "jkdf67sf6", 21381L) *>
+      ZIO.logSpan("createUser")(createUser("sherlockholmes", "jkdf67sf6", 21381L))
 }
 
 object CounterExample extends ZIOAppDefault {
@@ -53,7 +63,9 @@ object CounterExample extends ZIOAppDefault {
    * Use the constructors in `Metric` to make a counter metric that accepts
    * integers as input.
    */
-  lazy val requestCounter: Metric.Counter[Int] = ???
+  lazy val requestCounter: Metric.Counter[Int] = 
+    //Metric.counter("request").contramap(_.toLong) // convert int to lonng
+    Metric.counterInt("request") // or just use counterInt, also have counterDouble, etc
 
   /**
    * EXERCISE
@@ -61,7 +73,7 @@ object CounterExample extends ZIOAppDefault {
    * Use methods on the counter to increment the counter on every request.
    */
   def processRequest(request: Request): Task[Response] =
-    ZIO.succeed(Response("OK"))
+    requestCounter.incrementBy(1) *> ZIO.succeed(Response("OK"))
 
   /**
    * EXERCISE
@@ -72,7 +84,11 @@ object CounterExample extends ZIOAppDefault {
    * will be exported to monitoring systems.
    *
    */
-  lazy val printCounter: ZIO[Any, Nothing, Unit] = ???
+  lazy val printCounter: ZIO[Any, Nothing, Unit] = 
+    for {
+      counter <- requestCounter.value
+      _ <- Console.printLine(s"Counter value: ${counter.count}").orDie // since it redquires no failures, use orDie to move to unreccoverable channel
+    } yield ()
 
   lazy val run = {
     val processor = processRequest(Request("input")).delay(100.millis).repeatN(99)
